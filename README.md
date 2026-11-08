@@ -19,18 +19,48 @@ An owner defines a mandate (spending limits and contract-term limits). An agent 
 
 ## How it works
 
-```
-Owner ── register_agent / create_mandate_version / register_vendor(terms_text)
-                                  │  stores only the Keccak-256 commitment of the terms
-Agent ── create_purchase_request(vendor, version, mandate, amount, nonce) ──► request_id
-Agent ── evaluate_purchase_request(request_id, terms_text)
-           1. checks agent, state, limits and the text commitment (before any LLM call)
-           2. LEADER: the LLM extracts 6 facts + verbatim quotes
-           3. VALIDATOR: validates the full envelope, re-resolves every quote,
-              re-extracts the 6 facts on its own, compares with no tolerance,
-              and runs a second LLM audit; any doubt => reject
-           4. Deterministic code derives APPROVED / DENIED / REVIEW
-           5. Writes the result to requests[request_id] and, if APPROVED, adds to the total
+```mermaid
+flowchart TD
+    subgraph SETUP["1 · Owner setup"]
+        A1["register_agent"] --> A2["create_mandate_version<br/>limits + allowed terms"]
+        A2 --> A3["register_vendor(terms_text)<br/>stores only the Keccak-256 commitment"]
+    end
+
+    subgraph REQUEST["2 · Agent request"]
+        B1["create_purchase_request<br/>vendor, version, mandate, amount, nonce"] --> B2(["request_id"])
+    end
+
+    subgraph EVAL["3 · evaluate_purchase_request(request_id, terms_text)"]
+        C1{"Agent, state, limits<br/>and text commitment OK?"}
+        C1 -- "no" --> X1["Revert before any LLM call"]
+        C1 -- "yes" --> C2["LEADER<br/>LLM extracts 6 facts<br/>with verbatim quotes"]
+        C2 --> C3["VALIDATORS<br/>re-check envelope and every quote<br/>re-extract the 6 facts independently<br/>second LLM audit"]
+        C3 --> C4{"Exact match<br/>on all fields?"}
+        C4 -- "any doubt" --> X2["Reject proposal"]
+    end
+
+    subgraph DECIDE["4 · Deterministic decision (plain code)"]
+        D1{"Confirmed<br/>violation?"}
+        D1 -- "yes" --> R1(["DENIED"])
+        D1 -- "no" --> D2{"All 6 facts<br/>FOUND?"}
+        D2 -- "no" --> R2(["REVIEW"])
+        D2 -- "yes" --> R3(["APPROVED"])
+    end
+
+    A3 --> B1
+    B2 --> C1
+    C4 -- "yes" --> D1
+    R1 --> S["Save to requests[request_id]"]
+    R2 --> S
+    R3 --> S
+    R3 --> T["Add amount to authorized total"]
+
+    classDef ok fill:#d1fae5,stroke:#059669,color:#064e3b
+    classDef bad fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    classDef warn fill:#fef3c7,stroke:#d97706,color:#78350f
+    class R3,T ok
+    class R1,X1,X2 bad
+    class R2 warn
 ```
 
 ### The six facts
