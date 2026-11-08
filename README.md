@@ -20,47 +20,59 @@ An owner defines a mandate (spending limits and contract-term limits). An agent 
 ## How it works
 
 ```mermaid
-flowchart TD
-    subgraph SETUP["1 · Owner setup"]
-        A1["register_agent"] --> A2["create_mandate_version<br/>limits + allowed terms"]
-        A2 --> A3["register_vendor(terms_text)<br/>stores only the Keccak-256 commitment"]
+%%{init: {"theme":"base","flowchart":{"curve":"basis","nodeSpacing":28,"rankSpacing":34},"themeVariables":{"fontFamily":"Inter, Segoe UI, Helvetica, Arial, sans-serif","fontSize":"15px","lineColor":"#64748b","primaryTextColor":"#0f172a"}}}%%
+flowchart LR
+    subgraph S1["① OWNER SETS THE RULES"]
+        direction TB
+        A1["Register agent"] --> A2["Create mandate<br/><i>limits + allowed terms</i>"] --> A3["Register vendor terms<br/><i>only the hash is stored</i>"]
     end
 
-    subgraph REQUEST["2 · Agent request"]
-        B1["create_purchase_request<br/>vendor, version, mandate, amount, nonce"] --> B2(["request_id"])
+    subgraph S2["② AGENT ASKS"]
+        direction TB
+        B1["Create purchase request<br/><i>vendor · mandate · amount</i>"] --> B2(["request_id"])
     end
 
-    subgraph EVAL["3 · evaluate_purchase_request(request_id, terms_text)"]
-        C1{"Agent, state, limits<br/>and text commitment OK?"}
-        C1 -- "no" --> X1["Revert before any LLM call"]
-        C1 -- "yes" --> C2["LEADER<br/>LLM extracts 6 facts<br/>with verbatim quotes"]
-        C2 --> C3["VALIDATORS<br/>re-check envelope and every quote<br/>re-extract the 6 facts independently<br/>second LLM audit"]
-        C3 --> C4{"Exact match<br/>on all fields?"}
-        C4 -- "any doubt" --> X2["Reject proposal"]
+    subgraph S3["③ EVALUATE"]
+        direction TB
+        C1["Check agent, limits<br/>and terms hash"] --> C2["LEADER LLM<br/>extracts 6 facts<br/>+ exact quotes"] --> C3["VALIDATORS<br/>re-check every quote<br/>and re-extract on their own"]
+        C1 -. "mismatch" .-> X1["Reverted<br/><i>no LLM used</i>"]
+        C3 -. "any doubt" .-> X2["Rejected"]
     end
 
-    subgraph DECIDE["4 · Deterministic decision (plain code)"]
-        D1{"Confirmed<br/>violation?"}
+    subgraph S4["④ DECISION · plain code"]
+        direction TB
+        D1{{"Confirmed<br/>violation?"}}
         D1 -- "yes" --> R1(["DENIED"])
-        D1 -- "no" --> D2{"All 6 facts<br/>FOUND?"}
+        D1 -- "no" --> D2{{"All 6 facts<br/>found?"}}
         D2 -- "no" --> R2(["REVIEW"])
         D2 -- "yes" --> R3(["APPROVED"])
+        R1 --> SV["Saved under request_id"]
+        R2 --> SV
+        R3 --> SV
+        R3 --> BG["+ authorized total"]
     end
 
-    A3 --> B1
-    B2 --> C1
-    C4 -- "yes" --> D1
-    R1 --> S["Save to requests[request_id]"]
-    R2 --> S
-    R3 --> S
-    R3 --> T["Add amount to authorized total"]
+    S1 --> S2 --> S3 --> S4
 
-    classDef ok fill:#d1fae5,stroke:#059669,color:#064e3b
-    classDef bad fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
-    classDef warn fill:#fef3c7,stroke:#d97706,color:#78350f
-    class R3,T ok
-    class R1,X1,X2 bad
+    classDef step fill:#eef2ff,stroke:#6366f1,stroke-width:1.5px,color:#1e1b4b
+    classDef id fill:#e0e7ff,stroke:#4f46e5,stroke-width:2px,color:#1e1b4b
+    classDef ai fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px,color:#3b0764
+    classDef ok fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#064e3b
+    classDef warn fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#78350f
+    classDef bad fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#7f1d1d
+    classDef out fill:#f1f5f9,stroke:#94a3b8,color:#334155
+    class A1,A2,A3,B1,C1,D1,D2 step
+    class B2 id
+    class C2,C3 ai
+    class R3 ok
+    class BG ok
     class R2 warn
+    class R1,X1,X2 bad
+    class SV out
+    style S1 fill:#f8fafc,stroke:#cbd5e1,color:#475569
+    style S2 fill:#f8fafc,stroke:#cbd5e1,color:#475569
+    style S3 fill:#faf5ff,stroke:#d8b4fe,color:#6b21a8
+    style S4 fill:#f8fafc,stroke:#cbd5e1,color:#475569
 ```
 
 ### The six facts
